@@ -53,6 +53,7 @@ chroma_db/
 chromadb/
 vectorstore/
 *.chroma/
+venue_policies_chroma_db
 
 # Personal notes
 notes.md
