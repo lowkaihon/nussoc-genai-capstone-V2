@@ -174,6 +174,116 @@ from langchain_classic.chains import LLMChain
 from langchain_classic.retrievers import ...
 ```
 
+### Retriever Package Organization
+
+**IMPORTANT**: Retrievers are split across two packages in LangChain 1.0. Understanding this distinction is critical for building RAG systems.
+
+#### Package Split Explanation
+
+**`langchain_community` - Base Retrievers**
+- Contains **core retrieval implementations** that fetch documents from various sources
+- Examples: Vector stores, BM25, TF-IDF, search APIs
+- These retrievers directly interface with data sources
+
+**`langchain_classic` - Orchestration Retrievers**
+- Contains **meta-retrievers** that orchestrate/combine other retrievers
+- Examples: Ensemble, compression, parent-document, multi-query
+- These retrievers wrap and coordinate base retrievers
+
+#### Common Retrievers and Their Locations
+
+| Retriever | Package | Purpose |
+|-----------|---------|---------|
+| `BM25Retriever` | `langchain_community` | Keyword-based sparse retrieval |
+| `TFIDFRetriever` | `langchain_community` | TF-IDF scoring retrieval |
+| Vector store retrievers | `langchain_community` | Semantic search (Chroma, FAISS, etc.) |
+| `EnsembleRetriever` | `langchain_classic` | Combine multiple retrievers with RRF |
+| `ContextualCompressionRetriever` | `langchain_classic` | Add reranking/filtering on top of retriever |
+| `MultiQueryRetriever` | `langchain_classic` | Generate multiple queries for one user query |
+| `ParentDocumentRetriever` | `langchain_classic` | Retrieve parent docs from child chunks |
+
+#### Hybrid RAG Example: Proper Imports
+
+```python
+# === Base Retrievers from langchain_community ===
+from langchain_community.retrievers import BM25Retriever
+from langchain_community.document_compressors import JinaRerank
+
+# === Orchestration Retrievers from langchain_classic ===
+from langchain_classic.retrievers import (
+    EnsembleRetriever,           # Combines multiple retrievers
+    ContextualCompressionRetriever  # Adds reranking layer
+)
+
+# === Vector Store from langchain_chroma ===
+from langchain_chroma import Chroma
+
+# === Setup: 3-Stage Retrieval Pipeline ===
+# Stage 1: BM25 keyword retriever (base retriever)
+bm25_retriever = BM25Retriever.from_documents(documents)
+
+# Stage 2: Semantic vector retriever (base retriever)
+vectorstore = Chroma.from_documents(documents, embeddings)
+semantic_retriever = vectorstore.as_retriever()
+
+# Combine Stage 1 + 2 with Ensemble (orchestration retriever)
+hybrid_retriever = EnsembleRetriever(
+    retrievers=[bm25_retriever, semantic_retriever],
+    weights=[0.5, 0.5]  # RRF fusion
+)
+
+# Stage 3: Add Jina reranking (orchestration retriever)
+compressor = JinaRerank(
+    model="jina-reranker-v2-base-multilingual",
+    top_n=3,
+    jina_api_key=jina_api_key
+)
+
+reranking_retriever = ContextualCompressionRetriever(
+    base_compressor=compressor,
+    base_retriever=hybrid_retriever  # Wraps the hybrid retriever
+)
+
+# Use the final retriever
+docs = reranking_retriever.invoke("your query here")
+```
+
+#### Why This Split Matters
+
+**Before LangChain 1.0**:
+```python
+# Everything was in langchain.retrievers - simple but monolithic
+from langchain.retrievers import EnsembleRetriever, BM25Retriever
+```
+
+**After LangChain 1.0**:
+```python
+# Clear separation - base vs orchestration
+from langchain_community.retrievers import BM25Retriever  # Base
+from langchain_classic.retrievers import EnsembleRetriever  # Orchestration
+```
+
+This separation:
+- ✅ Makes it clear which retrievers are foundational vs compositional
+- ✅ Allows independent versioning of retriever implementations
+- ✅ Reduces coupling between core LangChain and specific data sources
+- ⚠️ Requires understanding which package contains which retriever
+
+#### Migration Checklist for Retrievers
+
+If you're upgrading from LangChain 0.x to 1.0:
+
+1. **Identify your retrievers**: List all retriever imports in your code
+2. **Check the tables above**: Determine which package each retriever now lives in
+3. **Install `langchain-classic`** if using orchestration retrievers:
+   ```bash
+   pip install langchain-classic>=1.0.0
+   # or
+   uv add langchain-classic>=1.0.0
+   ```
+4. **Update imports**: Split imports between `langchain_community` and `langchain_classic`
+5. **Test thoroughly**: Ensure retrieval pipelines work as expected
+
 ---
 
 ## =' LangGraph 1.0 - Production-Ready Infrastructure
@@ -373,6 +483,90 @@ graph = builder.compile(
 - Full backward compatibility maintained
 - No breaking changes until 2.0
 - Safe to use in production
+
+---
+
+## ⚠️ Known Third-Party Integration Issues
+
+### Cohere Reranker Incompatibility with LangChain 1.0
+
+**Status**: As of November 2025, `langchain-cohere` is **NOT compatible** with LangChain 1.0
+
+**The Problem**:
+- `langchain-cohere==0.4.6` (latest version) requires `langchain-core>=0.3.76,<0.4.0`
+- LangChain 1.0 requires `langchain-core>=1.0.0`
+- These version constraints are **mutually exclusive**
+
+**Impact**:
+```bash
+# This will fail with dependency conflicts
+pip install langchain>=1.0.0 langchain-cohere
+
+# Error: Cannot install langchain-cohere due to langchain-core version conflict
+```
+
+**What This Breaks**:
+- Cannot use `CohereRerank` for retrieval reranking
+- Cannot use Cohere embeddings via `langchain-cohere` package
+- Any code importing from `langchain_cohere` will have dependency conflicts
+
+**Timeline**:
+- Cohere maintains "first-class support" for LangChain but hasn't released a 1.0-compatible version yet
+- Monitor https://pypi.org/project/langchain-cohere/ for updates
+
+### Recommended Alternatives for Reranking
+
+**1. Jina AI Reranker** (Recommended)
+```python
+from langchain_community.document_compressors import JinaRerank
+from langchain_classic.retrievers import ContextualCompressionRetriever
+
+# Works with LangChain 1.0 - no additional packages needed
+compressor = JinaRerank(
+    model="jina-reranker-v2-base-multilingual",
+    top_n=3,
+    jina_api_key="your-jina-api-key"
+)
+
+reranking_retriever = ContextualCompressionRetriever(
+    base_compressor=compressor,
+    base_retriever=your_base_retriever
+)
+```
+
+**Benefits**:
+- ✅ Compatible with LangChain 1.0 (available in `langchain_community`)
+- ✅ No dependency conflicts
+- ✅ Free tier: 1M tokens/month
+- ✅ State-of-the-art multilingual cross-encoder
+- ✅ Cloud-based (no local GPU needed)
+- ✅ Cost: ~$0.002 per query after free tier
+
+**Get API Key**: https://jina.ai/
+
+**2. Local Cross-Encoder Models**
+```python
+# Requires: pip install sentence-transformers
+from langchain.retrievers.document_compressors import CrossEncoderReranker
+from langchain_community.cross_encoders import HuggingFaceCrossEncoder
+
+model = HuggingFaceCrossEncoder(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
+compressor = CrossEncoderReranker(model=model, top_n=3)
+```
+
+**Benefits**:
+- ✅ No API costs or rate limits
+- ✅ Full data privacy (runs locally)
+- ⚠️ Requires local compute resources
+- ⚠️ Large model downloads (200MB-1GB)
+
+### Compatibility Status Summary
+
+| Package | LangChain 1.0 Compatible | Status | Recommendation |
+|---------|-------------------------|--------|----------------|
+| `langchain-cohere` | ❌ No | Blocked by langchain-core version conflict | Avoid for now |
+| `langchain_community` (Jina) | ✅ Yes | Fully compatible | **Recommended** |
+| `sentence-transformers` (local) | ✅ Yes | Works but heavy dependencies | Use if privacy/cost critical |
 
 ---
 
