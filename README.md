@@ -2,6 +2,10 @@
 
 An intelligent conversational AI system that helps users discover events, understand venue policies, and make informed planning decisions through real-time data integration, advanced RAG retrieval, and multimodal analysis.
 
+## Demo
+
+https://github.com/user-attachments/assets/15becad1-3582-4cab-9e42-f3534a00bab0
+
 ## Overview
 
 This project demonstrates production-grade AI application development using **LangChain/LangGraph 1.0** with:
@@ -60,7 +64,7 @@ This project demonstrates production-grade AI application development using **La
 
 The system uses a **controller agent** pattern built with LangChain 1.0's `create_agent`, which orchestrates 8 specialized tools through intelligent tool selection and chaining.
 
-![System Architecture Diagram](./System%20Architecture%20Diagram.png)
+<img width="3989" height="1459" alt="System Architecture Diagram" src="https://github.com/user-attachments/assets/4ceb1efb-f84c-441b-b672-4e4c5df2abc0" />
 
 ### Core Components
 
