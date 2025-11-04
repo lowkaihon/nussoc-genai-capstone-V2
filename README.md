@@ -4,7 +4,7 @@ An intelligent conversational AI system that helps users discover events, unders
 
 ## Demo
 
-https://github.com/user-attachments/assets/15becad1-3582-4cab-9e42-f3534a00bab0
+https://github.com/user-attachments/assets/e063d28e-bf19-4c3f-9e67-51f8712f093a
 
 ## Overview
 
